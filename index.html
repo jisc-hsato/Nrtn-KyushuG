@@ -9,10 +9,12 @@
         .hidden { display: none; }
         .diary-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #ddd; }
         .btn-group button { margin-left: 5px; }
-        textarea { width: 100%; height: 100px; margin: 10px 0; }
+        input[type="text"], textarea { width: 100%; margin: 10px 0; padding: 5px; box-sizing: border-box; }
+        textarea { height: 100px; }
         button { cursor: pointer; padding: 5px 10px; }
         .nav-btn { margin-bottom: 20px; }
         #loading { text-align: center; font-weight: bold; color: #666; margin: 20px 0; }
+        .post-date-label { font-size: 0.85em; color: #666; margin-left: 8px; font-weight: normal; }
     </style>
 </head>
 <body>
@@ -27,6 +29,7 @@
         <fieldset id="admin-form">
             <legend>新規投稿の追加</legend>
             <label>日付: <input type="date" id="input-date"></label><br>
+            <label>投稿タイトル:<br><input type="text" id="input-title" placeholder="タイトルを入力..."></label><br>
             <label>内容:<br><textarea id="input-content" placeholder="コンテンツを数行で入力..."></textarea></label><br>
             <button id="btn-create">追加する</button>
         </fieldset>
@@ -36,16 +39,17 @@
 
     <!-- ================= 下層ページ（詳細）ビュー ================= -->
     <div id="view-detail" class="hidden">
-        <!-- 閲覧者用でも動く一覧に戻るボタン -->
         <button class="nav-btn" id="btn-back">← 一覧に戻る</button>
-        <h1 id="detail-date"></h1>
+        <h1 id="detail-title-display"></h1>
         <div id="detail-display-mode">
             <p id="detail-text" style="white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 5px;"></p>
             <button id="btn-to-edit">✏️ 編集する</button>
             <button id="btn-copy-url">🔗 閲覧専用のURLをコピー</button>
         </div>
+        <!-- 編集フォーム -->
         <div id="detail-edit-mode" class="hidden">
-            <textarea id="edit-content"></textarea><br>
+            <label>投稿タイトル:<br><input type="text" id="edit-title"></label><br>
+            <label>内容:<br><textarea id="edit-content"></textarea></label><br>
             <button id="btn-update-save">保存</button>
             <button id="btn-edit-cancel">キャンセル</button>
         </div>
@@ -101,14 +105,16 @@
                 history.pushState({}, '', cleanUrl);
                 document.getElementById('admin-form').classList.remove('hidden');
             } else {
-                // ② 閲覧者の場合は「新規投稿の追加エリア」を非表示
                 document.getElementById('admin-form').classList.add('hidden');
             }
             
             document.getElementById('view-top').classList.remove('hidden');
             document.getElementById('view-detail').classList.add('hidden');
             renderList();
-            document.getElementById('input-date').value = new Date().toLocaleDateString('sv-SE');
+            
+            // 修正済み：今日の日付をデフォルトで自動セット
+            document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('input-title').value = '';
             document.getElementById('input-content').value = '';
         }
 
@@ -117,7 +123,6 @@
             const isViewMode = params.get('mode') === 'view';
             
             if (isViewMode) {
-                // ① 閲覧者の場合も「一覧に戻る」が押せるようクエリを維持して移動
                 history.pushState({}, '', `?date=${postKey}&mode=view`);
                 document.getElementById('btn-back').classList.remove('hidden'); 
                 document.getElementById('btn-to-edit').classList.add('hidden');  
@@ -131,8 +136,13 @@
             document.getElementById('view-detail').classList.remove('hidden');
             
             const displayDate = postKey.substring(0, 10);
-            document.getElementById('detail-date').innerText = `📝 ${displayDate} の投稿`;
-            document.getElementById('detail-text').innerText = postData[postKey];
+            
+            // 💡 旧データ（文字だけ）と新データ（タイトル＋内容オブジェクト）の互換性を持たせる
+            const postObj = typeof postData[postKey] === 'object' ? postData[postKey] : { title: "無題", content: postData[postKey] };
+            
+            // 詳細画面のタイトルと日付を表示
+            document.getElementById('detail-title-display').innerHTML = `📝 ${postObj.title} <span class="post-date-label">(${displayDate})</span>`;
+            document.getElementById('detail-text').innerText = postObj.content;
             switchEditMode(false);
         }
         // --- リスト描画 ---
@@ -156,16 +166,18 @@
                 const item = document.createElement('div');
                 item.className = 'diary-item';
                 
-                const textPreview = postData[postKey].length > 15 ? postData[postKey].substring(0, 15) + '...' : postData[postKey];
+                // 💡 データの形式（古い文字列形式か、新しいオブジェクト形式か）を自動判別
+                const postObj = typeof postData[postKey] === 'object' ? postData[postKey] : { title: "（タイトルなし）", content: postData[postKey] };
 
                 if (isViewMode) {
-                    // ② 閲覧者の場合は操作ボタン（表示/編集、削除）を表示しない
+                    // ③ 閲覧者用：【投稿タイトル】＋ 投稿日付文字列 のリンク表示（ボタンなし）
                     item.innerHTML = `
-                        <a href="?date=${postKey}&mode=view" class="post-link"><strong>${displayDate}</strong> - <span style="color:#666; font-size:0.9em;">${textPreview}</span></a>
+                        <a href="?date=${postKey}&mode=view" class="post-link"><strong>${postObj.title}</strong> <span style="color:#666; font-size:0.85em; margin-left:5px;">(${displayDate})</span></a>
                     `;
                 } else {
+                    // 管理者用：【投稿タイトル】＋ 投稿日付文字列 ＋ 操作ボタン
                     item.innerHTML = `
-                        <a href="?date=${postKey}" class="post-link"><strong>${displayDate}</strong> - <span style="color:#666; font-size:0.9em;">${textPreview}</span></a>
+                        <a href="?date=${postKey}" class="post-link"><strong>${postObj.title}</strong> <span style="color:#666; font-size:0.85em; margin-left:5px;">(${displayDate})</span></a>
                         <div class="btn-group">
                             <button class="view-btn">表示/編集</button>
                             <button class="del-btn" style="color:red;">削除</button>
@@ -187,12 +199,14 @@
             });
         }
 
-        // --- 新規投稿の保存機能 ---
+        // --- タイトルと内容を別々に保存する機能 ---
         function createPost() {
             const dateInput = document.getElementById('input-date').value;
+            const titleInput = document.getElementById('input-title').value.trim();
             const contentInput = document.getElementById('input-content').value.trim();
 
             if (!dateInput) return alert('日付を選択してください。');
+            if (!titleInput) return alert('タイトルを入力してください。');
             if (!contentInput) return alert('コンテンツを入力してください。');
 
             const uniqueKey = dateInput + "_" + Date.now();
@@ -201,21 +215,31 @@
                 ? `${firebaseConfig.databaseURL}posts/${uniqueKey}.json`
                 : `${firebaseConfig.databaseURL}/posts/${uniqueKey}.json`;
 
+            // 💡 タイトルと内容をオブジェクト形式にしてFirebaseへ保存
+            const saveData = {
+                title: titleInput,
+                content: contentInput
+            };
+
             fetch(singleUrl, {
                 method: 'PUT',
-                body: JSON.stringify(contentInput)
+                body: JSON.stringify(saveData)
             })
             .then(() => {
-                alert(`${dateInput} の新規投稿を追加しました！`);
+                alert(`「${titleInput}」を追加しました！`);
                 fetchAllPosts();
             })
             .catch(err => alert('保存エラー: ' + err.message));
         }
 
         function switchEditMode(isEdit) {
+            const currentParam = new URLSearchParams(window.location.search).get('date');
+            const postObj = typeof postData[currentParam] === 'object' ? postData[currentParam] : { title: "", content: postData[currentParam] };
+
             if (isEdit) {
-                const currentParam = new URLSearchParams(window.location.search).get('date');
-                document.getElementById('edit-content').value = postData[currentParam];
+                // 編集画面を開いた時にタイトルと内容をそれぞれセット
+                document.getElementById('edit-title').value = postObj.title;
+                document.getElementById('edit-content').value = postObj.content;
                 document.getElementById('detail-display-mode').classList.add('hidden');
                 document.getElementById('detail-edit-mode').classList.remove('hidden');
             } else {
@@ -224,18 +248,27 @@
             }
         }
 
+        // --- タイトルと内容の編集・更新機能 ---
         function updatePostDetail() {
             const currentParam = new URLSearchParams(window.location.search).get('date');
+            const updatedTitle = document.getElementById('edit-title').value.trim();
             const updatedContent = document.getElementById('edit-content').value.trim();
+            
+            if (!updatedTitle) return alert('タイトルを入力してください。');
             if (!updatedContent) return alert('コンテンツを入力してください。');
 
             const singleUrl = firebaseConfig.databaseURL.endsWith('/')
                 ? `${firebaseConfig.databaseURL}posts/${currentParam}.json`
                 : `${firebaseConfig.databaseURL}/posts/${currentParam}.json`;
             
+            const saveData = {
+                title: updatedTitle,
+                content: updatedContent
+            };
+
             fetch(singleUrl, {
                 method: 'PUT',
-                body: JSON.stringify(updatedContent)
+                body: JSON.stringify(saveData)
             })
             .then(() => {
                 switchEditMode(false);
@@ -245,8 +278,8 @@
         }
 
         function deletePost(postKey) {
-            const displayDate = postKey.substring(0, 10);
-            if (!confirm(`${displayDate} のこの投稿を削除してもよろしいですか？`)) return;
+            const postObj = typeof postData[postKey] === 'object' ? postData[postKey] : { title: "この投稿", content: "" };
+            if (!confirm(`「${postObj.title}」を削除してもよろしいですか？`)) return;
 
             const singleUrl = firebaseConfig.databaseURL.endsWith('/')
                 ? `${firebaseConfig.databaseURL}posts/${postKey}.json`
@@ -261,7 +294,6 @@
             });
         }
 
-        // --- クエリパラメータ付きの閲覧用URLコピー機能 ---
         function copyDetailURL() {
             const currentParam = new URLSearchParams(window.location.search).get('date');
             const baseUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;

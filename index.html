@@ -233,3 +233,11 @@
         document.getElementById('btn-back').addEventListener('click', showTopView);
         document.getElementById('btn-to-edit').addEventListener('click', () => switchEditMode(true));
         document.getElementById('btn-edit-cancel').addEventListener('click', () => switchEditMode(false));
+        document.getElementById('btn-update-save').addEventListener('click', updatePostDetail);
+        document.getElementById('btn-copy-url').addEventListener('click', copyDetailURL);
+
+        // 実行開始
+        fetchAllPosts();
+    </script>
+</body>
+</html>

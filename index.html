@@ -1,3 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マイポータル</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 10px; line-height: 1.6; }
+        .hidden { display: none; }
+        .diary-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #ddd; }
+        .btn-group button { margin-left: 5px; }
+        textarea { width: 100%; height: 100px; margin: 10px 0; }
+        button { cursor: pointer; padding: 5px 10px; }
+        .nav-btn { margin-bottom: 20px; }
+        #loading { text-align: center; font-weight: bold; color: #666; margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+    <!-- ローディング表示 -->
+    <div id="loading">データを読み込み中...</div>
+
+    <!-- ================= トップページビュー ================= -->
+    <div id="view-top" class="hidden">
+        <h1>📅 投稿一覧</h1>
+        <!-- 管理者用追加フォーム -->
+        <fieldset id="admin-form">
+            <legend>新規投稿の追加</legend>
+            <label>日付: <input type="date" id="input-date"></label><br>
+            <label>内容:<br><textarea id="input-content" placeholder="コンテンツを数行で入力..."></textarea></label><br>
+            <button id="btn-create">追加する</button>
+        </fieldset>
+        <h2>過去の投稿</h2>
+        <div id="post-list"></div>
+    </div>
+
+    <!-- ================= 下層ページ（詳細）ビュー ================= -->
+    <div id="view-detail" class="hidden">
+        <!-- 閲覧者用でも動く一覧に戻るボタン -->
+        <button class="nav-btn" id="btn-back">← 一覧に戻る</button>
+        <h1 id="detail-date"></h1>
+        <div id="detail-display-mode">
+            <p id="detail-text" style="white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 5px;"></p>
+            <button id="btn-to-edit">✏️ 編集する</button>
+            <button id="btn-copy-url">🔗 閲覧専用のURLをコピー</button>
+        </div>
+        <div id="detail-edit-mode" class="hidden">
+            <textarea id="edit-content"></textarea><br>
+            <button id="btn-update-save">保存</button>
+            <button id="btn-edit-cancel">キャンセル</button>
+        </div>
+    </div>
     <script>
         // -------------------------------------------------------------
         // 【重要】あなた自身の Firebase 設定情報に書き換えてください！
@@ -38,13 +90,13 @@
                     console.error(err);
                 });
         }
+
         // --- ルーティング関数 ---
         function showTopView() {
             const params = new URLSearchParams(window.location.search);
             const isViewMode = params.get('mode') === 'view';
 
             if (!isViewMode) {
-                // 管理者の場合はクエリをクリア
                 const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
                 history.pushState({}, '', cleanUrl);
                 document.getElementById('admin-form').classList.remove('hidden');
@@ -56,7 +108,7 @@
             document.getElementById('view-top').classList.remove('hidden');
             document.getElementById('view-detail').classList.add('hidden');
             renderList();
-            document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('input-date').value = new Date().toISOString().split('T');
             document.getElementById('input-content').value = '';
         }
 
@@ -67,8 +119,8 @@
             if (isViewMode) {
                 // ① 閲覧者の場合も「一覧に戻る」が押せるようクエリを維持して移動
                 history.pushState({}, '', `?date=${postKey}&mode=view`);
-                document.getElementById('btn-back').classList.remove('hidden'); // 常に表示
-                document.getElementById('btn-to-edit').classList.add('hidden');  // 編集ボタンは隠す
+                document.getElementById('btn-back').classList.remove('hidden'); 
+                document.getElementById('btn-to-edit').classList.add('hidden');  
             } else {
                 history.pushState({}, '', `?date=${postKey}`);
                 document.getElementById('btn-back').classList.remove('hidden');
@@ -107,12 +159,11 @@
                 const textPreview = postData[postKey].length > 15 ? postData[postKey].substring(0, 15) + '...' : postData[postKey];
 
                 if (isViewMode) {
-                    // ② 閲覧者の場合はリンクのみ表示し、操作ボタンは表示しない
+                    // ② 閲覧者の場合は操作ボタン（表示/編集、削除）を表示しない
                     item.innerHTML = `
                         <a href="?date=${postKey}&mode=view" class="post-link"><strong>${displayDate}</strong> - <span style="color:#666; font-size:0.9em;">${textPreview}</span></a>
                     `;
                 } else {
-                    // 管理者の場合は操作ボタン一式を表示
                     item.innerHTML = `
                         <a href="?date=${postKey}" class="post-link"><strong>${displayDate}</strong> - <span style="color:#666; font-size:0.9em;">${textPreview}</span></a>
                         <div class="btn-group">
@@ -135,6 +186,7 @@
                 listContainer.appendChild(item);
             });
         }
+
         // --- 新規投稿の保存機能 ---
         function createPost() {
             const dateInput = document.getElementById('input-date').value;
@@ -208,6 +260,7 @@
                 fetchAllPosts();
             });
         }
+
         // --- クエリパラメータ付きの閲覧用URLコピー機能 ---
         function copyDetailURL() {
             const currentParam = new URLSearchParams(window.location.search).get('date');
@@ -227,7 +280,6 @@
         document.getElementById('btn-update-save').addEventListener('click', updatePostDetail);
         document.getElementById('btn-copy-url').addEventListener('click', copyDetailURL);
 
-        // 実行開始
         fetchAllPosts();
     </script>
 </body>

@@ -108,7 +108,7 @@
             document.getElementById('view-top').classList.remove('hidden');
             document.getElementById('view-detail').classList.add('hidden');
             renderList();
-            document.getElementById('input-date').value = new Date().toISOString().split('T');
+            document.getElementById('input-date').value = new Date().toLocaleDateString('sv-SE');
             document.getElementById('input-content').value = '';
         }
 

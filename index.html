@@ -136,15 +136,34 @@
             document.getElementById('view-detail').classList.remove('hidden');
             
             const displayDate = postKey.substring(0, 10);
-            
-            // 💡 旧データ（文字だけ）と新データ（タイトル＋内容オブジェクト）の互換性を持たせる
             const postObj = typeof postData[postKey] === 'object' ? postData[postKey] : { title: "無題", content: postData[postKey] };
             
-            // 詳細画面のタイトルと日付を表示
             document.getElementById('detail-title-display').innerHTML = `📝 ${postObj.title} <span class="post-date-label">(${displayDate})</span>`;
-            document.getElementById('detail-text').innerText = postObj.content;
+
+            // 💡 URLを自動的にクリック可能なリンクに変換する処理
+            let rawText = postObj.content;
+            
+            // 安全対策：HTMLタグが直接動かないようにエスケープ処理（セキュリティ対策）
+            let escapedText = rawText
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+
+            // URL（httpまたはhttpsから始まる文字列）を見つける正規表現
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+            // 見つけたURLを <a> タグに変換（新しいタブで開く設定：target="_blank"）
+            let linkedText = escapedText.replace(urlRegex, function(url) {
+                return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>';
+            });
+
+            // 画面の表示エリアにテキストを反映
+            document.getElementById('detail-text').innerHTML = linkedText;
             switchEditMode(false);
         }
+
         // --- リスト描画 ---
         function renderList() {
             const listContainer = document.getElementById('post-list');

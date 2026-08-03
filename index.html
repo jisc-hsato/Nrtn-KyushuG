@@ -49,7 +49,6 @@
         </div>
     </div>
 
-    <!-- 💡 【超重要】CORSエラーを物理的に発生させないため、ブラウザに最初から内蔵されている標準FetchAPIでFirebaseに直接通信します -->
     <script>
         // -------------------------------------------------------------
         // 【重要】あなた自身の Firebase 設定情報に書き換えてください！
@@ -62,19 +61,22 @@
             storageBucket: "hs-portal-5537c.firebasestorage.app"
         };
 
-        // FirebaseのリアルタイムデータベースURL（REST APIエンドポイント）の整形
+        // データベースURLの末尾処理
         const baseDbUrl = firebaseConfig.databaseURL.endsWith('/') 
             ? firebaseConfig.databaseURL + 'posts.json' 
             : firebaseConfig.databaseURL + '/posts.json';
 
         let postData = {};
 
-        // データの初期読み込み関数
+        // データの読み込み関数
         function fetchAllPosts() {
             fetch(baseDbUrl)
                 .then(res => res.json())
                 .then(data => {
+                    // データが空（null）であっても空のオブジェクトとして処理を続行
                     postData = data || {};
+                    
+                    // ローディング画面を隠す
                     document.getElementById('loading').classList.add('hidden');
                     
                     // URLパラメータを確認してルーティング
@@ -156,7 +158,6 @@
             if (!contentInput) return alert('コンテンツを入力してください。');
             if (postData[dateInput] && !confirm('既存の日付です。上書きしますか？')) return;
 
-            // 各日付ごとに直接保存リクエストを送る
             const singleUrl = firebaseConfig.databaseURL.endsWith('/')
                 ? `${firebaseConfig.databaseURL}posts/${dateInput}.json`
                 : `${firebaseConfig.databaseURL}/posts/${dateInput}.json`;
@@ -167,7 +168,7 @@
             })
             .then(() => {
                 alert(`${dateInput} の投稿を追加しました！`);
-                fetchAllPosts(); // 再読み込み
+                fetchAllPosts();
             })
             .catch(err => alert('保存エラー: ' + err.message));
         }
@@ -200,7 +201,7 @@
             .then(() => {
                 switchEditMode(false);
                 alert('変更を保存しました。');
-                fetchAllPosts(); // 再読み込み
+                fetchAllPosts();
             });
         }
 
@@ -216,7 +217,7 @@
             })
             .then(() => {
                 alert(`${date} の投稿を削除しました。`);
-                fetchAllPosts(); // 再読み込み
+                fetchAllPosts();
             });
         }
 
@@ -227,7 +228,8 @@
             }).catch(err => alert('コピーに失敗しました。'));
         }
 
-        // 初回起動処理
+        // イベントリスナー設定
         document.getElementById('btn-create').addEventListener('click', createPost);
         document.getElementById('btn-back').addEventListener('click', showTopView);
         document.getElementById('btn-to-edit').addEventListener('click', () => switchEditMode(true));
+        document.getElementById('btn-edit-cancel').addEventListener('click', () => switchEditMode(false));

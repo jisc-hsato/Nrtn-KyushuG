@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マイポータル</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 10px; line-height: 1.6; }
+        .hidden { display: none; }
+        .diary-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #ddd; }
+        .btn-group button { margin-left: 5px; }
+        textarea { width: 100%; height: 100px; margin: 10px 0; }
+        button { cursor: pointer; padding: 5px 10px; }
+        .nav-btn { margin-bottom: 20px; }
+        #loading { text-align: center; font-weight: bold; color: #666; margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+    <!-- ローディング表示 -->
+    <div id="loading">データを読み込み中...</div>
+
+    <!-- ================= トップページビュー ================= -->
+    <div id="view-top" class="hidden">
+        <h1>📅 投稿一覧</h1>
+        <fieldset>
+            <legend>新規投稿の追加</legend>
+            <label>日付: <input type="date" id="input-date"></label><br>
+            <label>内容:<br><textarea id="input-content" placeholder="コンテンツを数行で入力..."></textarea></label><br>
+            <button id="btn-create">追加する</button>
+        </fieldset>
+        <h2>過去の投稿</h2>
+        <div id="post-list"></div>
+    </div>
+
+    <!-- ================= 下層ページ（詳細）ビュー ================= -->
+    <div id="view-detail" class="hidden">
+        <button class="nav-btn" id="btn-back">← 一覧に戻る</button>
+        <h1 id="detail-date"></h1>
+        <div id="detail-display-mode">
+            <p id="detail-text" style="white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 5px;"></p>
+            <button id="btn-to-edit">✏️ 編集する</button>
+            <button id="btn-copy-url">🔗 このページのURLをコピー</button>
+        </div>
+        <div id="detail-edit-mode" class="hidden">
+            <textarea id="edit-content"></textarea><br>
+            <button id="btn-update-save">保存</button>
+            <button id="btn-edit-cancel">キャンセル</button>
+        </div>
+    </div>
+
+    <!-- 💡 【超重要】CORSエラーを物理的に発生させないため、ブラウザに最初から内蔵されている標準FetchAPIでFirebaseに直接通信します -->
+    <script>
+        // -------------------------------------------------------------
+        // 【重要】あなた自身の Firebase 設定情報に書き換えてください！
+        // -------------------------------------------------------------
+        const firebaseConfig = {
+            apiKey: "AIzaSyAT6nmTEDmj1-15b6FFLx75uQwL7JWU_Kc",
+            authDomain: "hs-portal-5537c.firebaseapp.com",
+            databaseURL: "https://hs-portal-5537c-default-rtdb.firebaseio.com",
+            projectId: "hs-portal-5537c",
+            storageBucket: "hs-portal-5537c.firebasestorage.app"
+        };
+
+        // FirebaseのリアルタイムデータベースURL（REST APIエンドポイント）の整形
+        const baseDbUrl = firebaseConfig.databaseURL.endsWith('/') 
+            ? firebaseConfig.databaseURL + 'posts.json' 
+            : firebaseConfig.databaseURL + '/posts.json';
+
+        let postData = {};
+
+        // データの初期読み込み関数
+        function fetchAllPosts() {
+            fetch(baseDbUrl)
+                .then(res => res.json())
+                .then(data => {
+                    postData = data || {};
+                    document.getElementById('loading').classList.add('hidden');
+                    
+                    // URLパラメータを確認してルーティング
+                    const params = new URLSearchParams(window.location.search);
+                    const dateParam = params.get('date');
+                    
+                    if (dateParam && postData[dateParam]) {
+                        showDetailView(dateParam);
+                    } else {
+                        showTopView();
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('loading').innerText = "データの読み込みに失敗しました。";
+                    console.error(err);
+                });
+        }
+
+        // --- ルーティング関数 ---
+        function showTopView() {
+            const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+            history.pushState({}, '', cleanUrl);
+            
+            document.getElementById('view-top').classList.remove('hidden');
+            document.getElementById('view-detail').classList.add('hidden');
+            renderList();
+            document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('input-content').value = '';
+        }
+
+        function showDetailView(date) {
+            history.pushState({}, '', `?date=${date}`);
+            document.getElementById('view-top').classList.add('hidden');
+            document.getElementById('view-detail').classList.remove('hidden');
+            document.getElementById('detail-date').innerText = `📝 ${date} の投稿`;
+            document.getElementById('detail-text').innerText = postData[date];
+            switchEditMode(false);
+        }
+
+        // --- リスト描画 ---
+        function renderList() {
+            const listContainer = document.getElementById('post-list');
+            listContainer.innerHTML = '';
+            
+            const sortedDates = Object.keys(postData).sort((a, b) => b.localeCompare(a));
+            if (sortedDates.length === 0) {
+                listContainer.innerHTML = '<p>投稿がまだありません。</p>';
+                return;
+            }
+
+            sortedDates.forEach(date => {
+                const item = document.createElement('div');
+                item.className = 'diary-item';
+                item.innerHTML = `
+                    <a href="?date=${date}" class="post-link"><strong>${date}</strong></a>
+                    <div class="btn-group">
+                        <button class="view-btn">表示/編集</button>
+                        <button class="del-btn" style="color:red;">削除</button>
+                    </div>
+                `;
+
+                item.querySelector('.post-link').addEventListener('click', (e) => {
+                    e.preventDefault();
+                    showDetailView(date);
+                });
+                item.querySelector('.view-btn').addEventListener('click', () => showDetailView(date));
+                item.querySelector('.del-btn').addEventListener('click', () => deletePost(date));
+
+                listContainer.appendChild(item);
+            });
+        }
+
+        // --- データベース直接通信（CRUD操作） ---
+        function createPost() {
+            const dateInput = document.getElementById('input-date').value;
+            const contentInput = document.getElementById('input-content').value.trim();
+
+            if (!dateInput) return alert('日付を選択してください。');
+            if (!contentInput) return alert('コンテンツを入力してください。');
+            if (postData[dateInput] && !confirm('既存の日付です。上書きしますか？')) return;
+
+            // 各日付ごとに直接保存リクエストを送る
+            const singleUrl = firebaseConfig.databaseURL.endsWith('/')
+                ? `${firebaseConfig.databaseURL}posts/${dateInput}.json`
+                : `${firebaseConfig.databaseURL}/posts/${dateInput}.json`;
+
+            fetch(singleUrl, {
+                method: 'PUT',
+                body: JSON.stringify(contentInput)
+            })
+            .then(() => {
+                alert(`${dateInput} の投稿を追加しました！`);
+                fetchAllPosts(); // 再読み込み
+            })
+            .catch(err => alert('保存エラー: ' + err.message));
+        }
+
+        function switchEditMode(isEdit) {
+            if (isEdit) {
+                const currentParam = new URLSearchParams(window.location.search).get('date');
+                document.getElementById('edit-content').value = postData[currentParam];
+                document.getElementById('detail-display-mode').classList.add('hidden');
+                document.getElementById('detail-edit-mode').classList.remove('hidden');
+            } else {
+                document.getElementById('detail-display-mode').classList.remove('hidden');
+                document.getElementById('detail-edit-mode').classList.add('hidden');
+            }
+        }
+
+        function updatePostDetail() {
+            const currentParam = new URLSearchParams(window.location.search).get('date');
+            const updatedContent = document.getElementById('edit-content').value.trim();
+            if (!updatedContent) return alert('コンテンツを入力してください。');
+
+            const singleUrl = firebaseConfig.databaseURL.endsWith('/')
+                ? `${firebaseConfig.databaseURL}posts/${currentParam}.json`
+                : `${firebaseConfig.databaseURL}/posts/${currentParam}.json`;
+            
+            fetch(singleUrl, {
+                method: 'PUT',
+                body: JSON.stringify(updatedContent)
+            })
+            .then(() => {
+                switchEditMode(false);
+                alert('変更を保存しました。');
+                fetchAllPosts(); // 再読み込み
+            });
+        }
+
+        function deletePost(date) {
+            if (!confirm(`${date} の投稿を削除してもよろしいですか？`)) return;
+
+            const singleUrl = firebaseConfig.databaseURL.endsWith('/')
+                ? `${firebaseConfig.databaseURL}posts/${date}.json`
+                : `${firebaseConfig.databaseURL}/posts/${date}.json`;
+
+            fetch(singleUrl, {
+                method: 'DELETE'
+            })
+            .then(() => {
+                alert(`${date} の投稿を削除しました。`);
+                fetchAllPosts(); // 再読み込み
+            });
+        }
+
+        function copyDetailURL() {
+            const currentUrl = window.location.href;
+            navigator.clipboard.writeText(currentUrl).then(() => {
+                alert('このページのURLをクリップボードにコピーしました！\n' + currentUrl);
+            }).catch(err => alert('コピーに失敗しました。'));
+        }
+
+        // 初回起動処理
+        document.getElementById('btn-create').addEventListener('click', createPost);
+        document.getElementById('btn-back').addEventListener('click', showTopView);
+        document.getElementById('btn-to-edit').addEventListener('click', () => switchEditMode(true));

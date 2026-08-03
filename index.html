@@ -17,13 +17,11 @@
 </head>
 <body>
 
-    <!-- ローディング表示 -->
     <div id="loading">データを読み込み中...</div>
 
     <!-- ================= トップページビュー ================= -->
     <div id="view-top" class="hidden">
         <h1>📅 投稿一覧</h1>
-        <!-- 管理者用追加フォーム -->
         <fieldset id="admin-form">
             <legend>新規投稿の追加</legend>
             <label>日付: <input type="date" id="input-date"></label><br>
@@ -49,7 +47,6 @@
             <button id="btn-edit-cancel">キャンセル</button>
         </div>
     </div>
-
     <script>
         // -------------------------------------------------------------
         // 【重要】あなた自身の Firebase 設定情報に書き換えてください！
@@ -73,7 +70,9 @@
             fetch(baseDbUrl)
                 .then(res => res.json())
                 .then(data => {
+                    // データが空、またはpostsが存在しない場合でも空オブジェクトとして処理
                     postData = data || {};
+                    
                     document.getElementById('loading').classList.add('hidden');
                     
                     const params = new URLSearchParams(window.location.search);
@@ -96,7 +95,6 @@
             const params = new URLSearchParams(window.location.search);
             const isViewMode = params.get('mode') === 'view';
 
-            // 閲覧モードの場合はURLを変更しない（パラメータを維持）
             if (!isViewMode) {
                 const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
                 history.pushState({}, '', cleanUrl);
@@ -116,7 +114,6 @@
             const params = new URLSearchParams(window.location.search);
             const isViewMode = params.get('mode') === 'view';
             
-            // URLパラメータの設定
             if (isViewMode) {
                 history.pushState({}, '', `?date=${postKey}&mode=view`);
                 document.getElementById('btn-back').classList.add('hidden');
@@ -130,7 +127,6 @@
             document.getElementById('view-top').classList.add('hidden');
             document.getElementById('view-detail').classList.remove('hidden');
             
-            // 表示用の日付（キーの先頭10文字）を抽出
             const displayDate = postKey.substring(0, 10);
             document.getElementById('detail-date').innerText = `📝 ${displayDate} の投稿`;
             document.getElementById('detail-text').innerText = postData[postKey];
@@ -145,28 +141,27 @@
             const params = new URLSearchParams(window.location.search);
             const isViewMode = params.get('mode') === 'view';
             
-            // キー（日付_タイムスタンプ）を降順（新しい順）にソート
             const sortedKeys = Object.keys(postData).sort((a, b) => b.localeCompare(a));
-            if (sortedKeys.length === 0) {
+            if (sortedKeys.length === 0 || (sortedKeys.length === 1 && postData[sortedKeys[0]] === "")) {
                 listContainer.innerHTML = '<p>投稿がまだありません。</p>';
                 return;
             }
 
             sortedKeys.forEach(postKey => {
-                const displayDate = postKey.substring(0, 10); // 表示は日付部分のみ
+                // posts配下の不要な初期化データをスキップ
+                if (postData[postKey] === "") return;
+
+                const displayDate = postKey.substring(0, 10);
                 const item = document.createElement('div');
                 item.className = 'diary-item';
                 
-                // プレビュー用に内容の最初の数文字を取得
                 const textPreview = postData[postKey].length > 15 ? postData[postKey].substring(0, 15) + '...' : postData[postKey];
 
                 if (isViewMode) {
-                    // ③ 閲覧専用時のリスト表示（ボタンなし）
                     item.innerHTML = `
                         <a href="?date=${postKey}&mode=view" class="post-link"><strong>${displayDate}</strong> - <span style="color:#666; font-size:0.9em;">${textPreview}</span></a>
                     `;
                 } else {
-                    // 通常時（管理用ボタンあり）
                     item.innerHTML = `
                         <a href="?date=${postKey}" class="post-link"><strong>${displayDate}</strong> - <span style="color:#666; font-size:0.9em;">${textPreview}</span></a>
                         <div class="btn-group">
@@ -190,7 +185,7 @@
             });
         }
 
-        // --- ① 同日複数投稿に対応した保存機能 ---
+        // --- 同日複数投稿に対応した保存機能 ---
         function createPost() {
             const dateInput = document.getElementById('input-date').value;
             const contentInput = document.getElementById('input-content').value.trim();
@@ -198,7 +193,6 @@
             if (!dateInput) return alert('日付を選択してください。');
             if (!contentInput) return alert('コンテンツを入力してください。');
 
-            // 日付の末尾に一意のタイムスタンプを付与 (例: 2026-08-03_1719999999)
             const uniqueKey = dateInput + "_" + Date.now();
 
             const singleUrl = firebaseConfig.databaseURL.endsWith('/')
@@ -226,17 +220,17 @@
                 document.getElementById('detail-display-mode').classList.remove('hidden');
                 document.getElementById('detail-edit-mode').classList.add('hidden');
             }
-
         }
 
         function updatePostDetail() {
             const currentParam = new URLSearchParams(window.location.search).get('date');
             const updatedContent = document.getElementById('edit-content').value.trim();
             if (!updatedContent) return alert('コンテンツを入力してください。');
-            const singleUrl = firebaseConfig.databaseURL.endsWith('/')
-                ? ${firebaseConfig.databaseURL}posts/${currentParam}.json
-                : ${firebaseConfig.databaseURL}/posts/${currentParam}.json;
 
+            const singleUrl = firebaseConfig.databaseURL.endsWith('/')
+                ? `${firebaseConfig.databaseURL}posts/${currentParam}.json`
+                : `${firebaseConfig.databaseURL}/posts/${currentParam}.json`;
+            
             fetch(singleUrl, {
                 method: 'PUT',
                 body: JSON.stringify(updatedContent)
@@ -246,34 +240,30 @@
                 alert('変更を保存しました。');
                 fetchAllPosts();
             });
-
         }
 
         function deletePost(postKey) {
             const displayDate = postKey.substring(0, 10);
-            if (!confirm(${displayDate} のこの投稿を削除してもよろしいですか？)) return;
+            if (!confirm(`${displayDate} のこの投稿を削除してもよろしいですか？`)) return;
+
             const singleUrl = firebaseConfig.databaseURL.endsWith('/')
-                ? ${firebaseConfig.databaseURL}posts/${postKey}.json
-                : ${firebaseConfig.databaseURL}/posts/${postKey}.json;
+                ? `${firebaseConfig.databaseURL}posts/${postKey}.json`
+                : `${firebaseConfig.databaseURL}/posts/${postKey}.json`;
 
             fetch(singleUrl, {
                 method: 'DELETE'
             })
             .then(() => {
-                alert(投稿を削除しました。);
+                alert(`投稿を削除しました。`);
                 fetchAllPosts();
             });
         }
 
-        // --- ② クエリパラメータ付きの閲覧用URLコピー機能 ---
         function copyDetailURL() {
             const currentParam = new URLSearchParams(window.location.search).get('date');
-
-            // オリジナルのベースURLを抽出して「&mode=view」を強制付与
-            const baseUrl = window.location.protocol + "//" + window.location.host +
-            window.location.pathname;
-            const viewUrl = ${baseUrl}?date=${currentParam}&mode=view;
-
+            const baseUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+            const viewUrl = `${baseUrl}?date=${currentParam}&mode=view`;
+            
             navigator.clipboard.writeText(viewUrl).then(() => {
                 alert('閲覧専用のURLをコピーしました！\n' + viewUrl);
             }).catch(err => alert('コピーに失敗しました。'));

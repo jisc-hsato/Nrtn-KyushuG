@@ -23,7 +23,8 @@
     <!-- ================= トップページビュー ================= -->
     <div id="view-top" class="hidden">
         <h1>📅 投稿一覧</h1>
-        <fieldset>
+        <!-- 管理者用追加フォーム -->
+        <fieldset id="admin-form">
             <legend>新規投稿の追加</legend>
             <label>日付: <input type="date" id="input-date"></label><br>
             <label>内容:<br><textarea id="input-content" placeholder="コンテンツを数行で入力..."></textarea></label><br>
@@ -40,7 +41,7 @@
         <div id="detail-display-mode">
             <p id="detail-text" style="white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 5px;"></p>
             <button id="btn-to-edit">✏️ 編集する</button>
-            <button id="btn-copy-url">🔗 このページのURLをコピー</button>
+            <button id="btn-copy-url">🔗 閲覧専用のURLをコピー</button>
         </div>
         <div id="detail-edit-mode" class="hidden">
             <textarea id="edit-content"></textarea><br>
@@ -61,7 +62,6 @@
             storageBucket: "hs-portal-5537c.firebasestorage.app"
         };
 
-        // データベースURLの末尾処理
         const baseDbUrl = firebaseConfig.databaseURL.endsWith('/') 
             ? firebaseConfig.databaseURL + 'posts.json' 
             : firebaseConfig.databaseURL + '/posts.json';
@@ -73,13 +73,9 @@
             fetch(baseDbUrl)
                 .then(res => res.json())
                 .then(data => {
-                    // データが空（null）であっても空のオブジェクトとして処理を続行
                     postData = data || {};
-                    
-                    // ローディング画面を隠す
                     document.getElementById('loading').classList.add('hidden');
                     
-                    // URLパラメータを確認してルーティング
                     const params = new URLSearchParams(window.location.search);
                     const dateParam = params.get('date');
                     
@@ -97,8 +93,17 @@
 
         // --- ルーティング関数 ---
         function showTopView() {
-            const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-            history.pushState({}, '', cleanUrl);
+            const params = new URLSearchParams(window.location.search);
+            const isViewMode = params.get('mode') === 'view';
+
+            // 閲覧モードの場合はURLを変更しない（パラメータを維持）
+            if (!isViewMode) {
+                const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                history.pushState({}, '', cleanUrl);
+                document.getElementById('admin-form').classList.remove('hidden');
+            } else {
+                document.getElementById('admin-form').classList.add('hidden');
+            }
             
             document.getElementById('view-top').classList.remove('hidden');
             document.getElementById('view-detail').classList.add('hidden');
@@ -107,12 +112,28 @@
             document.getElementById('input-content').value = '';
         }
 
-        function showDetailView(date) {
-            history.pushState({}, '', `?date=${date}`);
+        function showDetailView(postKey) {
+            const params = new URLSearchParams(window.location.search);
+            const isViewMode = params.get('mode') === 'view';
+            
+            // URLパラメータの設定
+            if (isViewMode) {
+                history.pushState({}, '', `?date=${postKey}&mode=view`);
+                document.getElementById('btn-back').classList.add('hidden');
+                document.getElementById('btn-to-edit').classList.add('hidden');
+            } else {
+                history.pushState({}, '', `?date=${postKey}`);
+                document.getElementById('btn-back').classList.remove('hidden');
+                document.getElementById('btn-to-edit').classList.remove('hidden');
+            }
+
             document.getElementById('view-top').classList.add('hidden');
             document.getElementById('view-detail').classList.remove('hidden');
-            document.getElementById('detail-date').innerText = `📝 ${date} の投稿`;
-            document.getElementById('detail-text').innerText = postData[date];
+            
+            // 表示用の日付（キーの先頭10文字）を抽出
+            const displayDate = postKey.substring(0, 10);
+            document.getElementById('detail-date').innerText = `📝 ${displayDate} の投稿`;
+            document.getElementById('detail-text').innerText = postData[postKey];
             switchEditMode(false);
         }
 
@@ -121,53 +142,75 @@
             const listContainer = document.getElementById('post-list');
             listContainer.innerHTML = '';
             
-            const sortedDates = Object.keys(postData).sort((a, b) => b.localeCompare(a));
-            if (sortedDates.length === 0) {
+            const params = new URLSearchParams(window.location.search);
+            const isViewMode = params.get('mode') === 'view';
+            
+            // キー（日付_タイムスタンプ）を降順（新しい順）にソート
+            const sortedKeys = Object.keys(postData).sort((a, b) => b.localeCompare(a));
+            if (sortedKeys.length === 0) {
                 listContainer.innerHTML = '<p>投稿がまだありません。</p>';
                 return;
             }
 
-            sortedDates.forEach(date => {
+            sortedKeys.forEach(postKey => {
+                const displayDate = postKey.substring(0, 10); // 表示は日付部分のみ
                 const item = document.createElement('div');
                 item.className = 'diary-item';
-                item.innerHTML = `
-                    <a href="?date=${date}" class="post-link"><strong>${date}</strong></a>
-                    <div class="btn-group">
-                        <button class="view-btn">表示/編集</button>
-                        <button class="del-btn" style="color:red;">削除</button>
-                    </div>
-                `;
+                
+                // プレビュー用に内容の最初の数文字を取得
+                const textPreview = postData[postKey].length > 15 ? postData[postKey].substring(0, 15) + '...' : postData[postKey];
+
+                if (isViewMode) {
+                    // ③ 閲覧専用時のリスト表示（ボタンなし）
+                    item.innerHTML = `
+                        <a href="?date=${postKey}&mode=view" class="post-link"><strong>${displayDate}</strong> - <span style="color:#666; font-size:0.9em;">${textPreview}</span></a>
+                    `;
+                } else {
+                    // 通常時（管理用ボタンあり）
+                    item.innerHTML = `
+                        <a href="?date=${postKey}" class="post-link"><strong>${displayDate}</strong> - <span style="color:#666; font-size:0.9em;">${textPreview}</span></a>
+                        <div class="btn-group">
+                            <button class="view-btn">表示/編集</button>
+                            <button class="del-btn" style="color:red;">削除</button>
+                        </div>
+                    `;
+                }
 
                 item.querySelector('.post-link').addEventListener('click', (e) => {
                     e.preventDefault();
-                    showDetailView(date);
+                    showDetailView(postKey);
                 });
-                item.querySelector('.view-btn').addEventListener('click', () => showDetailView(date));
-                item.querySelector('.del-btn').addEventListener('click', () => deletePost(date));
+                
+                if (!isViewMode) {
+                    item.querySelector('.view-btn').addEventListener('click', () => showDetailView(postKey));
+                    item.querySelector('.del-btn').addEventListener('click', () => deletePost(postKey));
+                }
 
                 listContainer.appendChild(item);
             });
         }
 
-        // --- データベース直接通信（CRUD操作） ---
+        // --- ① 同日複数投稿に対応した保存機能 ---
         function createPost() {
             const dateInput = document.getElementById('input-date').value;
             const contentInput = document.getElementById('input-content').value.trim();
 
             if (!dateInput) return alert('日付を選択してください。');
             if (!contentInput) return alert('コンテンツを入力してください。');
-            if (postData[dateInput] && !confirm('既存の日付です。上書きしますか？')) return;
+
+            // 日付の末尾に一意のタイムスタンプを付与 (例: 2026-08-03_1719999999)
+            const uniqueKey = dateInput + "_" + Date.now();
 
             const singleUrl = firebaseConfig.databaseURL.endsWith('/')
-                ? `${firebaseConfig.databaseURL}posts/${dateInput}.json`
-                : `${firebaseConfig.databaseURL}/posts/${dateInput}.json`;
+                ? `${firebaseConfig.databaseURL}posts/${uniqueKey}.json`
+                : `${firebaseConfig.databaseURL}/posts/${uniqueKey}.json`;
 
             fetch(singleUrl, {
                 method: 'PUT',
                 body: JSON.stringify(contentInput)
             })
             .then(() => {
-                alert(`${dateInput} の投稿を追加しました！`);
+                alert(`${dateInput} の新規投稿を追加しました！`);
                 fetchAllPosts();
             })
             .catch(err => alert('保存エラー: ' + err.message));
@@ -183,17 +226,17 @@
                 document.getElementById('detail-display-mode').classList.remove('hidden');
                 document.getElementById('detail-edit-mode').classList.add('hidden');
             }
+
         }
 
         function updatePostDetail() {
             const currentParam = new URLSearchParams(window.location.search).get('date');
             const updatedContent = document.getElementById('edit-content').value.trim();
             if (!updatedContent) return alert('コンテンツを入力してください。');
-
             const singleUrl = firebaseConfig.databaseURL.endsWith('/')
-                ? `${firebaseConfig.databaseURL}posts/${currentParam}.json`
-                : `${firebaseConfig.databaseURL}/posts/${currentParam}.json`;
-            
+                ? ${firebaseConfig.databaseURL}posts/${currentParam}.json
+                : ${firebaseConfig.databaseURL}/posts/${currentParam}.json;
+
             fetch(singleUrl, {
                 method: 'PUT',
                 body: JSON.stringify(updatedContent)
@@ -203,28 +246,36 @@
                 alert('変更を保存しました。');
                 fetchAllPosts();
             });
+
         }
 
-        function deletePost(date) {
-            if (!confirm(`${date} の投稿を削除してもよろしいですか？`)) return;
-
+        function deletePost(postKey) {
+            const displayDate = postKey.substring(0, 10);
+            if (!confirm(${displayDate} のこの投稿を削除してもよろしいですか？)) return;
             const singleUrl = firebaseConfig.databaseURL.endsWith('/')
-                ? `${firebaseConfig.databaseURL}posts/${date}.json`
-                : `${firebaseConfig.databaseURL}/posts/${date}.json`;
+                ? ${firebaseConfig.databaseURL}posts/${postKey}.json
+                : ${firebaseConfig.databaseURL}/posts/${postKey}.json;
 
             fetch(singleUrl, {
                 method: 'DELETE'
             })
             .then(() => {
-                alert(`${date} の投稿を削除しました。`);
+                alert(投稿を削除しました。);
                 fetchAllPosts();
             });
         }
 
+        // --- ② クエリパラメータ付きの閲覧用URLコピー機能 ---
         function copyDetailURL() {
-            const currentUrl = window.location.href;
-            navigator.clipboard.writeText(currentUrl).then(() => {
-                alert('このページのURLをクリップボードにコピーしました！\n' + currentUrl);
+            const currentParam = new URLSearchParams(window.location.search).get('date');
+
+            // オリジナルのベースURLを抽出して「&mode=view」を強制付与
+            const baseUrl = window.location.protocol + "//" + window.location.host +
+            window.location.pathname;
+            const viewUrl = ${baseUrl}?date=${currentParam}&mode=view;
+
+            navigator.clipboard.writeText(viewUrl).then(() => {
+                alert('閲覧専用のURLをコピーしました！\n' + viewUrl);
             }).catch(err => alert('コピーに失敗しました。'));
         }
 
